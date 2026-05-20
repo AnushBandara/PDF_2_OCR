@@ -1,0 +1,74 @@
+# =========================
+# Python virtual environment
+# =========================
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+# Python cache files
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# =========================
+# Environment variables
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Input PDFs
+# =========================
+input_pdfs/
+*.pdf
+
+# =========================
+# Generated markdown outputs
+# =========================
+output_markdown/
+*.md
+
+# Keep instruction/readme files if needed
+!README.md
+!to_run.txt
+
+# =========================
+# Temporary images
+# =========================
+temp_images/
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.tiff
+*.bmp
+
+# =========================
+# Logs and progress files
+# =========================
+logs/
+*.log
+
+# =========================
+# Downloaded local models
+# =========================
+models/
+
+# =========================
+# OS / editor files
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# =========================
+# Jupyter checkpoints
+# =========================
+.ipynb_checkpoints/
