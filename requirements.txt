@@ -3,8 +3,9 @@
 torch
 torchvision
 torchaudio
-transformers
-tokenizers
+
+transformers==4.46.3
+tokenizers==0.20.3
 accelerate
 safetensors
 einops
@@ -14,3 +15,5 @@ pymupdf
 Pillow
 tqdm
 python-dotenv
+matplotlib
+requests
