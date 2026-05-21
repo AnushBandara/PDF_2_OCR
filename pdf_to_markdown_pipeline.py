@@ -481,19 +481,10 @@ Error:
 
 
 # ============================================================
-# MAIN FUNCTION
+# SHARED PIPELINE RUNNER
 # ============================================================
 
-def main():
-    print("=" * 80)
-    print("PDF to Markdown OCR Pipeline")
-    print("=" * 80)
-
-    print(f"OCR_MODE: {OCR_MODE}")
-    print(f"DEVICE_MODE: {DEVICE_MODE}")
-    print(f"DPI: {DPI}")
-    print(f"DELETE_IMAGES_AFTER_OCR: {DELETE_IMAGES_AFTER_OCR}")
-
+def run_pipeline():
     progress = load_progress()
 
     tokenizer, model, device = load_ocr_engine()
@@ -516,6 +507,52 @@ def main():
         )
 
     print("\nAll available PDFs processed.")
+
+
+# ============================================================
+# FASTAPI ENTRY FUNCTION
+# ============================================================
+
+def run_pipeline_from_api():
+    """
+    This function is used by FastAPI.
+
+    It runs the same OCR pipeline, but without depending on the
+    command-line main() function.
+
+    FastAPI can call this function in a background thread.
+    """
+    print("=" * 80)
+    print("PDF to Markdown OCR Pipeline Started From FastAPI")
+    print("=" * 80)
+
+    print(f"OCR_MODE: {OCR_MODE}")
+    print(f"DEVICE_MODE: {DEVICE_MODE}")
+    print(f"DPI: {DPI}")
+    print(f"DELETE_IMAGES_AFTER_OCR: {DELETE_IMAGES_AFTER_OCR}")
+
+    run_pipeline()
+
+    print("=" * 80)
+    print("PDF to Markdown OCR Pipeline Finished From FastAPI")
+    print("=" * 80)
+
+
+# ============================================================
+# MAIN FUNCTION
+# ============================================================
+
+def main():
+    print("=" * 80)
+    print("PDF to Markdown OCR Pipeline")
+    print("=" * 80)
+
+    print(f"OCR_MODE: {OCR_MODE}")
+    print(f"DEVICE_MODE: {DEVICE_MODE}")
+    print(f"DPI: {DPI}")
+    print(f"DELETE_IMAGES_AFTER_OCR: {DELETE_IMAGES_AFTER_OCR}")
+
+    run_pipeline()
 
 
 if __name__ == "__main__":

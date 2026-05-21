@@ -18,3 +18,8 @@ python-dotenv
 matplotlib
 requests
 huggingface_hub
+
+fastapi
+uvicorn
+python-multipart
+jinja2

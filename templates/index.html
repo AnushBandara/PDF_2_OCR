@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PDF to Markdown OCR</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #000000;
+            margin: 0;
+            padding: 40px;
+            color: #f5f5f5;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 950px;
+            margin: auto;
+            background: #111111;
+            border-radius: 18px;
+            padding: 34px;
+            border: 1px solid rgba(255, 140, 0, 0.25);
+        }
+
+        .header {
+            margin-bottom: 28px;
+        }
+
+        h1 {
+            margin: 0;
+            color: #ff9f1c;
+            font-size: 34px;
+            letter-spacing: -0.5px;
+        }
+
+        .subtitle {
+            color: #bdbdbd;
+            margin-top: 10px;
+            line-height: 1.6;
+        }
+
+        .upload-box {
+            border: 2px dashed rgba(255, 159, 28, 0.55);
+            padding: 30px;
+            border-radius: 16px;
+            background: #141414;
+            margin-bottom: 22px;
+        }
+
+        .upload-box h3 {
+            margin-top: 0;
+            color: #ffffff;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            background: #080808;
+            color: #dddddd;
+            border: 1px solid #333333;
+            margin-top: 12px;
+        }
+
+        input[type="file"]::file-selector-button {
+            background: #ff8c00;
+            color: #000000;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-right: 12px;
+        }
+
+        input[type="file"]::file-selector-button:hover {
+            background: #ffae42;
+        }
+
+        .actions {
+            margin-top: 22px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: #ff8c00;
+            color: #000000;
+            border: none;
+            padding: 12px 18px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: bold;
+            transition: 0.2s ease;
+        }
+
+        button:hover {
+            background: #ffae42;
+            transform: translateY(-1px);
+        }
+
+        button.secondary {
+            background: #1f1f1f;
+            color: #ff9f1c;
+            border: 1px solid rgba(255, 159, 28, 0.45);
+        }
+
+        button.secondary:hover {
+            background: #2a2a2a;
+        }
+
+        button.danger-btn {
+            background: #2a0f0f;
+            color: #ff6b6b;
+            border: 1px solid rgba(255, 107, 107, 0.45);
+        }
+
+        button.danger-btn:hover {
+            background: #3a1515;
+            color: #ff8080;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 16px 18px;
+            background: #0b0b0b;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 159, 28, 0.25);
+        }
+
+        .status strong {
+            color: #ff9f1c;
+        }
+
+        #jobMessage {
+            color: #eeeeee;
+        }
+
+        .top-download-section {
+            margin-top: 18px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .download-all-btn {
+            display: none;
+            background: #ff8c00;
+            color: #000000;
+            text-decoration: none;
+            padding: 12px 18px;
+            border-radius: 12px;
+            font-weight: bold;
+            transition: 0.2s ease;
+        }
+
+        .download-all-btn:hover {
+            background: #ffae42;
+            transform: translateY(-1px);
+        }
+
+        .pdf-card {
+            margin-top: 22px;
+            padding: 20px;
+            background: #0f0f0f;
+            border-radius: 16px;
+            border: 1px solid #2c2c2c;
+        }
+
+        .pdf-card h3 {
+            margin-top: 0;
+            color: #ffffff;
+            word-break: break-word;
+        }
+
+        .small {
+            font-size: 14px;
+            color: #a9a9a9;
+            line-height: 1.5;
+        }
+
+        .progress-bar-bg {
+            width: 100%;
+            height: 20px;
+            background: #262626;
+            border-radius: 999px;
+            overflow: hidden;
+            margin-top: 12px;
+            border: 1px solid #333333;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff6a00, #ff9f1c, #ffd166);
+            width: 0%;
+            transition: width 0.4s ease;
+        }
+
+        .card-footer {
+            margin-top: 14px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .download-btn {
+            display: inline-block;
+            background: #ff8c00;
+            color: #000000;
+            text-decoration: none;
+            padding: 11px 15px;
+            border-radius: 10px;
+            font-weight: bold;
+            transition: 0.2s ease;
+        }
+
+        .download-btn:hover {
+            background: #ffae42;
+            transform: translateY(-1px);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 7px 10px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .badge.running {
+            background: rgba(255, 159, 28, 0.15);
+            color: #ff9f1c;
+            border: 1px solid rgba(255, 159, 28, 0.35);
+        }
+
+        .badge.done {
+            background: rgba(34, 197, 94, 0.14);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.35);
+        }
+
+        .badge.waiting {
+            background: rgba(156, 163, 175, 0.14);
+            color: #d1d5db;
+            border: 1px solid rgba(156, 163, 175, 0.25);
+        }
+
+        .empty-state {
+            margin-top: 22px;
+            padding: 22px;
+            border-radius: 14px;
+            background: #0b0b0b;
+            border: 1px solid #252525;
+            color: #9ca3af;
+        }
+
+        @media (max-width: 700px) {
+            body {
+                padding: 18px;
+            }
+
+            .container {
+                padding: 24px;
+            }
+
+            h1 {
+                font-size: 28px;
+            }
+
+            .actions,
+            .top-download-section {
+                flex-direction: column;
+            }
+
+            button,
+            .download-all-btn,
+            .download-btn {
+                width: 100%;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+    <div class="header">
+        <h1>PDF to Markdown OCR</h1>
+        <p class="subtitle">
+            Upload PDF files, start conversion, track page-by-page progress, and download the final Markdown output.
+        </p>
+    </div>
+
+    <div class="upload-box">
+        <h3>Upload PDF Files</h3>
+
+        <p class="small">
+            Select one or more PDF files. The system will convert each PDF page into Markdown and combine the result into one Markdown file per PDF.
+        </p>
+
+        <input id="pdfFiles" type="file" multiple accept="application/pdf">
+
+        <div class="actions">
+            <button onclick="uploadFiles()">Upload PDFs</button>
+            <button class="secondary" onclick="startConversion()">Start Conversion</button>
+            <button class="danger-btn" onclick="clearAllFiles()">Clear All Files</button>
+        </div>
+    </div>
+
+    <div class="status">
+        <strong>Status:</strong>
+        <span id="jobMessage">Idle</span>
+    </div>
+
+    <div class="top-download-section">
+        <a id="downloadAllBtn" class="download-all-btn" href="/download-all">
+            Download All Markdown Files
+        </a>
+    </div>
+
+    <div id="pdfList"></div>
+</div>
+
+<script>
+    async function uploadFiles() {
+        const input = document.getElementById("pdfFiles");
+
+        if (!input.files.length) {
+            alert("Please select at least one PDF file.");
+            return;
+        }
+
+        const formData = new FormData();
+
+        for (const file of input.files) {
+            formData.append("files", file);
+        }
+
+        document.getElementById("jobMessage").innerText = "Uploading PDF files...";
+
+        try {
+            const response = await fetch("/upload", {
+                method: "POST",
+                body: formData
+            });
+
+            const data = await response.json();
+
+            document.getElementById("jobMessage").innerText = data.message;
+            input.value = "";
+            refreshProgress();
+        } catch (error) {
+            document.getElementById("jobMessage").innerText = "Upload failed.";
+            alert("Upload failed. Please check the server.");
+        }
+    }
+
+    async function startConversion() {
+        document.getElementById("jobMessage").innerText = "Starting conversion...";
+
+        try {
+            const response = await fetch("/start", {
+                method: "POST"
+            });
+
+            const data = await response.json();
+
+            document.getElementById("jobMessage").innerText = data.message;
+            refreshProgress();
+        } catch (error) {
+            document.getElementById("jobMessage").innerText = "Failed to start conversion.";
+            alert("Failed to start conversion. Please check the server.");
+        }
+    }
+
+    async function clearAllFiles() {
+        const confirmed = confirm(
+            "Are you sure you want to clear all uploaded PDFs, generated markdown files, temporary images, and logs?"
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        document.getElementById("jobMessage").innerText = "Clearing files...";
+
+        try {
+            const response = await fetch("/clear", {
+                method: "POST"
+            });
+
+            const data = await response.json();
+
+            document.getElementById("jobMessage").innerText = data.message;
+
+            if (!response.ok) {
+                alert(data.message);
+            }
+
+            refreshProgress();
+        } catch (error) {
+            document.getElementById("jobMessage").innerText = "Failed to clear files.";
+            alert("Failed to clear files. Please check the server.");
+        }
+    }
+
+    async function refreshProgress() {
+        try {
+            const response = await fetch("/progress");
+            const data = await response.json();
+
+            document.getElementById("jobMessage").innerText = data.message;
+
+            const downloadAllBtn = document.getElementById("downloadAllBtn");
+
+            if (data.has_download_all) {
+                downloadAllBtn.style.display = "inline-block";
+                downloadAllBtn.href = data.download_all_url;
+            } else {
+                downloadAllBtn.style.display = "none";
+            }
+
+            const pdfList = document.getElementById("pdfList");
+            pdfList.innerHTML = "";
+
+            if (!data.pdfs.length) {
+                pdfList.innerHTML = `
+                    <div class="empty-state">
+                        No PDFs uploaded yet. Upload a PDF file to begin.
+                    </div>
+                `;
+                return;
+            }
+
+            for (const pdf of data.pdfs) {
+                const card = document.createElement("div");
+                card.className = "pdf-card";
+
+                let downloadButton = "";
+                let badge = "";
+
+                if (pdf.is_completed) {
+                    badge = `<span class="badge done">Completed</span>`;
+                } else if (data.running) {
+                    badge = `<span class="badge running">Processing</span>`;
+                } else {
+                    badge = `<span class="badge waiting">Waiting</span>`;
+                }
+
+                if (pdf.download_ready) {
+                    downloadButton = `
+                        <a class="download-btn" href="${pdf.download_url}">
+                            Download Markdown
+                        </a>
+                    `;
+                }
+
+                card.innerHTML = `
+                    <h3>${pdf.file_name}</h3>
+
+                    <p class="small">
+                        Completed ${pdf.completed_pages} / ${pdf.total_pages} pages
+                        (${pdf.percentage}%)
+                    </p>
+
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" style="width: ${pdf.percentage}%"></div>
+                    </div>
+
+                    <div class="card-footer">
+                        ${badge}
+                        ${downloadButton}
+                    </div>
+                `;
+
+                pdfList.appendChild(card);
+            }
+        } catch (error) {
+            document.getElementById("jobMessage").innerText = "Unable to read progress.";
+        }
+    }
+
+    setInterval(refreshProgress, 2000);
+    refreshProgress();
+</script>
+
+</body>
+</html>

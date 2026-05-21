@@ -8,12 +8,18 @@ from huggingface_hub import snapshot_download
 
 MODEL_NAME = "deepseek-ai/DeepSeek-OCR"
 
+# Main project folders
 INPUT_PDFS_DIR = Path("input_pdfs")
 OUTPUT_MARKDOWN_DIR = Path("output_markdown")
 TEMP_IMAGES_DIR = Path("temp_images")
 LOGS_DIR = Path("logs")
 MODELS_DIR = Path("models")
 
+# FastAPI UI folders
+TEMPLATES_DIR = Path("templates")
+STATIC_DIR = Path("static")
+
+# Model save location
 MODEL_SAVE_DIR = MODELS_DIR / "deepseek-ocr"
 
 
@@ -29,6 +35,8 @@ def create_project_folders():
         LOGS_DIR,
         MODELS_DIR,
         MODEL_SAVE_DIR,
+        TEMPLATES_DIR,
+        STATIC_DIR,
     ]
 
     print("Creating required project folders...")
@@ -47,7 +55,11 @@ def create_project_folders():
 def is_model_already_downloaded():
     """
     Checks whether the DeepSeek-OCR model files already exist locally.
+    This avoids downloading the model again if it is already available.
     """
+
+    if not MODEL_SAVE_DIR.exists():
+        return False
 
     required_files = [
         "config.json",
@@ -97,7 +109,7 @@ def download_model_snapshot():
 
 def main():
     print("=" * 70)
-    print("DeepSeek-OCR Model Downloader")
+    print("DeepSeek-OCR Model Downloader and Project Setup")
     print("=" * 70)
 
     create_project_folders()
