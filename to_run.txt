@@ -8,3 +8,10 @@ uvicorn app:app --reload --host 127.0.0.1 --port 7000
 nvidia smi
 
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+
+
+pip uninstall -y torch torchvision torchaudio
+pip uninstall -y torch torchvision torchaudio
+pip cache purge
+pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
