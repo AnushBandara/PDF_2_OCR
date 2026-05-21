@@ -19,22 +19,18 @@ IMAGE_OUTPUT_ROOT = Path("temp_images")
 MARKDOWN_OUTPUT_DIR = Path("output_markdown")
 LOG_DIR = Path("logs")
 
-# Local model path.
-# This must already exist after running download_deepseek_ocr_model.py
 MODEL_PATH = Path("models/deepseek-ocr")
 
 DPI = 300
 
 # Options:
-# "gpu"  = use NVIDIA CUDA GPU. Recommended/default for RTX 4090 PC.
+# "gpu"  = use NVIDIA CUDA GPU. Default for RTX 4090 PC.
 # "cpu"  = use CPU. Useful for Mac testing.
 # "auto" = use CUDA if available, otherwise CPU.
-DEVICE_MODE = "gpu"
+DEVICE_MODE = "cpu"
 
-# Default: delete page images after OCR
 DELETE_IMAGES_AFTER_OCR = True
 
-# DeepSeek-OCR settings
 PROMPT = "<image>\n<|grounding|>Convert the document to markdown. "
 BASE_SIZE = 1024
 IMAGE_SIZE = 640
@@ -55,6 +51,10 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 PROGRESS_LOG_PATH = LOG_DIR / "progress.json"
 ERROR_LOG_PATH = LOG_DIR / "errors.log"
 OCR_TEMP_ROOT = LOG_DIR / "ocr_temp"
+PAGE_MARKDOWN_ROOT = LOG_DIR / "page_markdown"
+
+OCR_TEMP_ROOT.mkdir(parents=True, exist_ok=True)
+PAGE_MARKDOWN_ROOT.mkdir(parents=True, exist_ok=True)
 
 
 # ============================================================
@@ -82,10 +82,7 @@ def save_progress(progress):
 
 
 def is_page_completed(progress, pdf_name, page_number):
-    completed_pages = progress.get("completed_pages", {})
-    pdf_completed_pages = completed_pages.get(pdf_name, [])
-
-    return page_number in pdf_completed_pages
+    return page_number in progress.get("completed_pages", {}).get(pdf_name, [])
 
 
 def mark_page_completed(progress, pdf_name, page_number):
@@ -152,7 +149,6 @@ def get_compute_device():
         print("Using CPU mode.")
         return device, dtype
 
-    # auto mode
     if torch.cuda.is_available():
         os.environ["CUDA_VISIBLE_DEVICES"] = CUDA_DEVICE
         device = torch.device("cuda")
@@ -249,24 +245,53 @@ def run_ocr_on_image(model, tokenizer, image_path, output_dir):
 
 
 # ============================================================
-# MARKDOWN FUNCTIONS
+# PAGE MARKDOWN FUNCTIONS
 # ============================================================
 
-def initialize_markdown_file(markdown_path, pdf_name):
-    if markdown_path.exists():
-        return
+def get_page_markdown_path(pdf_name, page_number):
+    page_md_dir = PAGE_MARKDOWN_ROOT / pdf_name
+    page_md_dir.mkdir(parents=True, exist_ok=True)
 
-    with open(markdown_path, "w", encoding="utf-8") as file:
-        file.write(f"# {pdf_name}\n")
+    return page_md_dir / f"page_{page_number:05d}.md"
 
 
-def append_page_markdown(markdown_path, page_number, markdown_content):
-    with open(markdown_path, "a", encoding="utf-8") as file:
-        file.write("\n\n")
-        file.write("---\n\n")
+def save_page_markdown_atomic(page_markdown_path, page_number, markdown_content):
+    temp_path = page_markdown_path.with_suffix(".tmp")
+
+    with open(temp_path, "w", encoding="utf-8") as file:
         file.write(f"## Page {page_number}\n\n")
         file.write(str(markdown_content).strip())
         file.write("\n")
+
+    temp_path.replace(page_markdown_path)
+
+
+def rebuild_final_markdown(pdf_name, total_pages):
+    final_markdown_path = MARKDOWN_OUTPUT_DIR / f"{pdf_name}.md"
+    temp_final_path = final_markdown_path.with_suffix(".tmp")
+
+    with open(temp_final_path, "w", encoding="utf-8") as final_file:
+        final_file.write(f"# {pdf_name}\n\n")
+
+        for page_number in range(1, total_pages + 1):
+            page_markdown_path = get_page_markdown_path(pdf_name, page_number)
+
+            if not page_markdown_path.exists():
+                final_file.write("\n\n---\n\n")
+                final_file.write(f"## Page {page_number}\n\n")
+                final_file.write("[PAGE OCR NOT COMPLETED]\n")
+                continue
+
+            with open(page_markdown_path, "r", encoding="utf-8") as page_file:
+                page_content = page_file.read().strip()
+
+            final_file.write("\n\n---\n\n")
+            final_file.write(page_content)
+            final_file.write("\n")
+
+    temp_final_path.replace(final_markdown_path)
+
+    print(f"Final markdown rebuilt: {final_markdown_path}")
 
 
 # ============================================================
@@ -280,7 +305,7 @@ def safe_delete_file(file_path):
     except Exception:
         log_error(
             f"""
-Failed to delete image file.
+Failed to delete file.
 
 File: {file_path}
 Time: {time.strftime("%Y-%m-%d %H:%M:%S")}
@@ -312,13 +337,17 @@ def process_single_pdf(pdf_path, model, tokenizer, device, progress):
     pdf_path = Path(pdf_path)
     pdf_name = pdf_path.stem
 
-    if pdf_name in progress.get("completed_pdfs", []):
-        print(f"Skipping already completed PDF: {pdf_name}")
-        return
-
     print("\n" + "=" * 80)
     print(f"Processing PDF: {pdf_name}")
     print("=" * 80)
+
+    total_pages = get_pdf_page_count(pdf_path)
+    print(f"Total pages: {total_pages}")
+
+    if pdf_name in progress.get("completed_pdfs", []):
+        print(f"PDF already completed. Rebuilding final markdown only: {pdf_name}")
+        rebuild_final_markdown(pdf_name, total_pages)
+        return
 
     pdf_image_dir = IMAGE_OUTPUT_ROOT / pdf_name
     pdf_image_dir.mkdir(parents=True, exist_ok=True)
@@ -326,18 +355,13 @@ def process_single_pdf(pdf_path, model, tokenizer, device, progress):
     pdf_ocr_temp_dir = OCR_TEMP_ROOT / pdf_name
     pdf_ocr_temp_dir.mkdir(parents=True, exist_ok=True)
 
-    markdown_path = MARKDOWN_OUTPUT_DIR / f"{pdf_name}.md"
-    initialize_markdown_file(markdown_path, pdf_name)
-
     try:
-        total_pages = get_pdf_page_count(pdf_path)
-        print(f"Total pages: {total_pages}")
-
         with fitz.open(pdf_path) as pdf_document:
             for page_index in tqdm(range(total_pages), desc=f"OCR {pdf_name}"):
                 page_number = page_index + 1
+                page_markdown_path = get_page_markdown_path(pdf_name, page_number)
 
-                if is_page_completed(progress, pdf_name, page_number):
+                if is_page_completed(progress, pdf_name, page_number) and page_markdown_path.exists():
                     continue
 
                 image_path = pdf_image_dir / f"page_{page_number:05d}.png"
@@ -359,8 +383,8 @@ def process_single_pdf(pdf_path, model, tokenizer, device, progress):
                         output_dir=page_ocr_output_dir
                     )
 
-                    append_page_markdown(
-                        markdown_path=markdown_path,
+                    save_page_markdown_atomic(
+                        page_markdown_path=page_markdown_path,
                         page_number=page_number,
                         markdown_content=markdown_result
                     )
@@ -392,6 +416,8 @@ Error:
 
         completed_page_count = len(progress["completed_pages"].get(pdf_name, []))
 
+        rebuild_final_markdown(pdf_name, total_pages)
+
         if completed_page_count == total_pages:
             mark_pdf_completed(progress, pdf_name)
             print(f"Completed PDF: {pdf_name}")
@@ -401,6 +427,7 @@ Error:
         else:
             print(f"PDF partially completed: {pdf_name}")
             print(f"Completed pages: {completed_page_count}/{total_pages}")
+            print("Final markdown was rebuilt with placeholders for incomplete pages.")
 
     except Exception:
         error_message = f"""

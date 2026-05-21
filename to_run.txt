@@ -1,2 +1,3 @@
 pip install -r requirements.txt
 python download_deepseek_ocr_model.py
+python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
