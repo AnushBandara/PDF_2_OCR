@@ -4,3 +4,7 @@ python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_
 python pdf_to_markdown_pipeline.py
 python reset_project_folders.py
 uvicorn app:app --reload --host 127.0.0.1 --port 7000
+
+nvidia smi
+
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
