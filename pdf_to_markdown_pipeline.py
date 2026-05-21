@@ -26,13 +26,13 @@ DPI = 300
 # Options:
 # "test"     = does not run DeepSeek-OCR. Good for Mac pipeline testing.
 # "deepseek" = runs real DeepSeek-OCR. Use this on the NVIDIA GPU PC.
-OCR_MODE = "test"
+OCR_MODE = "deepseek"
 
 # Options:
 # "gpu"  = use NVIDIA CUDA GPU. Use this on RTX 4090 PC.
 # "cpu"  = use CPU. Useful for Mac testing with OCR_MODE="test".
 # "auto" = use CUDA if available, otherwise CPU.
-DEVICE_MODE = "cpu"
+DEVICE_MODE = "gpu"
 
 DELETE_IMAGES_AFTER_OCR = True
 
