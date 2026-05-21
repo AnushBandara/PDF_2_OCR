@@ -2,6 +2,9 @@ import os
 import json
 import time
 import traceback
+import io
+import contextlib
+import re
 from pathlib import Path
 
 import fitz  # PyMuPDF
@@ -21,7 +24,8 @@ LOG_DIR = Path("logs")
 
 MODEL_PATH = Path("models/deepseek-ocr")
 
-DPI = 300
+# For 8GB VRAM GPUs, lower values are safer.
+DPI = 150
 
 # Options:
 # "test"     = does not run DeepSeek-OCR. Good for Mac pipeline testing.
@@ -29,7 +33,7 @@ DPI = 300
 OCR_MODE = "deepseek"
 
 # Options:
-# "gpu"  = use NVIDIA CUDA GPU. Use this on RTX 4090 PC.
+# "gpu"  = use NVIDIA CUDA GPU.
 # "cpu"  = use CPU. Useful for Mac testing with OCR_MODE="test".
 # "auto" = use CUDA if available, otherwise CPU.
 DEVICE_MODE = "gpu"
@@ -37,9 +41,11 @@ DEVICE_MODE = "gpu"
 DELETE_IMAGES_AFTER_OCR = True
 
 PROMPT = "<image>\n<|grounding|>Convert the document to markdown. "
-BASE_SIZE = 1024
-IMAGE_SIZE = 640
-CROP_MODE = True
+
+# Safer for 8GB VRAM. Increase later if you use a stronger GPU.
+BASE_SIZE = 512
+IMAGE_SIZE = 512
+CROP_MODE = False
 
 CUDA_DEVICE = "0"
 
@@ -140,7 +146,7 @@ def get_compute_device():
             raise RuntimeError(
                 "DEVICE_MODE is set to 'gpu', but CUDA is not available.\n"
                 "For Mac testing, use OCR_MODE='test' and DEVICE_MODE='cpu'.\n"
-                "For RTX 4090 PC, install CUDA-supported PyTorch and NVIDIA drivers."
+                "For NVIDIA PC, install CUDA-supported PyTorch and NVIDIA drivers."
             )
 
         device = torch.device("cuda")
@@ -244,6 +250,100 @@ def load_ocr_engine():
 
 
 # ============================================================
+# OCR OUTPUT CLEANING
+# ============================================================
+
+def remove_deepseek_tags(text):
+    text = re.sub(r"<\|ref\|>.*?<\|/ref\|>", "", text)
+    text = re.sub(r"<\|det\|>.*?<\|/det\|>", "", text)
+    return text
+
+
+def clean_deepseek_terminal_output(raw_text):
+    """
+    DeepSeek-OCR prints the OCR result to stdout.
+    This function removes model/debug lines and keeps useful OCR text.
+    """
+
+    lines = raw_text.splitlines()
+    cleaned_lines = []
+
+    skip_contains = [
+        "directly resize",
+        "BASE:",
+        "NO PATCHES",
+        "image size:",
+        "valid image tokens:",
+        "output texts tokens",
+        "compression ratio:",
+        "save results",
+        "image:",
+        "other:",
+        "torch.Size",
+        "The attention mask",
+        "Setting `pad_token_id`",
+        "The `seen_tokens`",
+        "`get_max_cache()`",
+        "The attention layers",
+        "UserWarning",
+    ]
+
+    for line in lines:
+        stripped = line.strip()
+
+        if not stripped:
+            cleaned_lines.append("")
+            continue
+
+        if any(phrase in stripped for phrase in skip_contains):
+            continue
+
+        if set(stripped) in [{"="}, {"-"}]:
+            continue
+
+        stripped = remove_deepseek_tags(stripped).strip()
+
+        if not stripped:
+            continue
+
+        cleaned_lines.append(stripped)
+
+    text = "\n".join(cleaned_lines)
+
+    # Remove repeated extra blank lines.
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    return text.strip()
+
+
+def read_saved_ocr_result(output_dir):
+    """
+    Fallback: DeepSeek-OCR may save OCR result files in output_dir.
+    Read them if available.
+    """
+
+    possible_patterns = [
+        "*.mmd",
+        "*.md",
+        "*.txt",
+    ]
+
+    for pattern in possible_patterns:
+        files = sorted(output_dir.glob(pattern))
+
+        for file_path in files:
+            try:
+                content = file_path.read_text(encoding="utf-8").strip()
+
+                if content:
+                    return content
+            except Exception:
+                continue
+
+    return None
+
+
+# ============================================================
 # OCR FUNCTION
 # ============================================================
 
@@ -263,20 +363,39 @@ def run_ocr_on_image(model, tokenizer, image_path, output_dir, pdf_name, page_nu
             "progress logging, image cleanup, and final markdown rebuilding are working."
         )
 
-    with torch.inference_mode():
-        result = model.infer(
-            tokenizer,
-            prompt=PROMPT,
-            image_file=str(image_path),
-            output_path=str(output_dir),
-            base_size=BASE_SIZE,
-            image_size=IMAGE_SIZE,
-            crop_mode=CROP_MODE,
-            save_results=True,
-            test_compress=True
-        )
+    captured_output = io.StringIO()
 
-    return result
+    result = None
+
+    with torch.inference_mode():
+        with contextlib.redirect_stdout(captured_output):
+            result = model.infer(
+                tokenizer,
+                prompt=PROMPT,
+                image_file=str(image_path),
+                output_path=str(output_dir),
+                base_size=BASE_SIZE,
+                image_size=IMAGE_SIZE,
+                crop_mode=CROP_MODE,
+                save_results=True,
+                test_compress=True
+            )
+
+    terminal_output = captured_output.getvalue().strip()
+    cleaned_terminal_output = clean_deepseek_terminal_output(terminal_output)
+
+    if cleaned_terminal_output:
+        return cleaned_terminal_output
+
+    saved_result = read_saved_ocr_result(output_dir)
+
+    if saved_result:
+        return saved_result
+
+    if result:
+        return str(result)
+
+    return "[OCR COMPLETED BUT NO TEXT RESULT WAS FOUND]"
 
 
 # ============================================================
@@ -529,6 +648,9 @@ def run_pipeline_from_api():
     print(f"OCR_MODE: {OCR_MODE}")
     print(f"DEVICE_MODE: {DEVICE_MODE}")
     print(f"DPI: {DPI}")
+    print(f"BASE_SIZE: {BASE_SIZE}")
+    print(f"IMAGE_SIZE: {IMAGE_SIZE}")
+    print(f"CROP_MODE: {CROP_MODE}")
     print(f"DELETE_IMAGES_AFTER_OCR: {DELETE_IMAGES_AFTER_OCR}")
 
     run_pipeline()
@@ -550,6 +672,9 @@ def main():
     print(f"OCR_MODE: {OCR_MODE}")
     print(f"DEVICE_MODE: {DEVICE_MODE}")
     print(f"DPI: {DPI}")
+    print(f"BASE_SIZE: {BASE_SIZE}")
+    print(f"IMAGE_SIZE: {IMAGE_SIZE}")
+    print(f"CROP_MODE: {CROP_MODE}")
     print(f"DELETE_IMAGES_AFTER_OCR: {DELETE_IMAGES_AFTER_OCR}")
 
     run_pipeline()
