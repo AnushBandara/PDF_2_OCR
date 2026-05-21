@@ -24,8 +24,13 @@ MODEL_PATH = Path("models/deepseek-ocr")
 DPI = 300
 
 # Options:
-# "gpu"  = use NVIDIA CUDA GPU. Default for RTX 4090 PC.
-# "cpu"  = use CPU. Useful for Mac testing.
+# "test"     = does not run DeepSeek-OCR. Good for Mac pipeline testing.
+# "deepseek" = runs real DeepSeek-OCR. Use this on the NVIDIA GPU PC.
+OCR_MODE = "test"
+
+# Options:
+# "gpu"  = use NVIDIA CUDA GPU. Use this on RTX 4090 PC.
+# "cpu"  = use CPU. Useful for Mac testing with OCR_MODE="test".
 # "auto" = use CUDA if available, otherwise CPU.
 DEVICE_MODE = "cpu"
 
@@ -134,7 +139,7 @@ def get_compute_device():
         if not torch.cuda.is_available():
             raise RuntimeError(
                 "DEVICE_MODE is set to 'gpu', but CUDA is not available.\n"
-                "For Mac testing, change DEVICE_MODE = 'cpu'.\n"
+                "For Mac testing, use OCR_MODE='test' and DEVICE_MODE='cpu'.\n"
                 "For RTX 4090 PC, install CUDA-supported PyTorch and NVIDIA drivers."
             )
 
@@ -185,7 +190,24 @@ def get_pdf_page_count(pdf_path):
 # MODEL LOADING
 # ============================================================
 
-def load_deepseek_ocr_model():
+def load_ocr_engine():
+    mode = OCR_MODE.lower().strip()
+
+    if mode not in ["test", "deepseek"]:
+        raise ValueError(
+            f"Invalid OCR_MODE: {OCR_MODE}. Use 'test' or 'deepseek'."
+        )
+
+    if mode == "test":
+        print("=" * 80)
+        print("OCR_MODE is set to TEST.")
+        print("DeepSeek-OCR model will NOT be loaded.")
+        print("This mode tests PDF conversion, logging, resume, and markdown rebuild.")
+        print("=" * 80)
+
+        device = torch.device("cpu")
+        return None, None, device
+
     if not MODEL_PATH.exists():
         raise FileNotFoundError(
             f"Local model folder not found: {MODEL_PATH.resolve()}\n"
@@ -225,8 +247,21 @@ def load_deepseek_ocr_model():
 # OCR FUNCTION
 # ============================================================
 
-def run_ocr_on_image(model, tokenizer, image_path, output_dir):
+def run_ocr_on_image(model, tokenizer, image_path, output_dir, pdf_name, page_number):
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    mode = OCR_MODE.lower().strip()
+
+    if mode == "test":
+        return (
+            "[TEST MODE]\n\n"
+            "DeepSeek-OCR was skipped for this page.\n\n"
+            f"PDF: {pdf_name}\n\n"
+            f"Page: {page_number}\n\n"
+            f"Image path: `{image_path}`\n\n"
+            "This confirms that PDF page conversion, page markdown saving, "
+            "progress logging, image cleanup, and final markdown rebuilding are working."
+        )
 
     with torch.inference_mode():
         result = model.infer(
@@ -325,7 +360,7 @@ def cleanup_empty_folder(folder_path):
 
 
 def clear_gpu_cache_if_needed(device):
-    if device.type == "cuda":
+    if device is not None and device.type == "cuda":
         torch.cuda.empty_cache()
 
 
@@ -380,7 +415,9 @@ def process_single_pdf(pdf_path, model, tokenizer, device, progress):
                         model=model,
                         tokenizer=tokenizer,
                         image_path=image_path,
-                        output_dir=page_ocr_output_dir
+                        output_dir=page_ocr_output_dir,
+                        pdf_name=pdf_name,
+                        page_number=page_number
                     )
 
                     save_page_markdown_atomic(
@@ -452,9 +489,14 @@ def main():
     print("PDF to Markdown OCR Pipeline")
     print("=" * 80)
 
+    print(f"OCR_MODE: {OCR_MODE}")
+    print(f"DEVICE_MODE: {DEVICE_MODE}")
+    print(f"DPI: {DPI}")
+    print(f"DELETE_IMAGES_AFTER_OCR: {DELETE_IMAGES_AFTER_OCR}")
+
     progress = load_progress()
 
-    tokenizer, model, device = load_deepseek_ocr_model()
+    tokenizer, model, device = load_ocr_engine()
 
     pdf_files = sorted(PDF_INPUT_DIR.glob("*.pdf"))
 

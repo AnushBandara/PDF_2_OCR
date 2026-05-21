@@ -17,3 +17,4 @@ tqdm
 python-dotenv
 matplotlib
 requests
+huggingface_hub

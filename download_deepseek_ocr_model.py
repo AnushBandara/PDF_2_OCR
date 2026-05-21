@@ -1,5 +1,5 @@
 from pathlib import Path
-from transformers import AutoModel, AutoTokenizer
+from huggingface_hub import snapshot_download
 
 
 # ============================================================
@@ -8,14 +8,12 @@ from transformers import AutoModel, AutoTokenizer
 
 MODEL_NAME = "deepseek-ai/DeepSeek-OCR"
 
-# Project folders
 INPUT_PDFS_DIR = Path("input_pdfs")
 OUTPUT_MARKDOWN_DIR = Path("output_markdown")
 TEMP_IMAGES_DIR = Path("temp_images")
 LOGS_DIR = Path("logs")
 MODELS_DIR = Path("models")
 
-# Model save location
 MODEL_SAVE_DIR = MODELS_DIR / "deepseek-ocr"
 
 
@@ -43,35 +41,59 @@ def create_project_folders():
 
 
 # ============================================================
-# DOWNLOAD AND SAVE MODEL
+# CHECK MODEL AVAILABILITY
 # ============================================================
 
-def download_tokenizer():
-    print("\nDownloading tokenizer...")
+def is_model_already_downloaded():
+    """
+    Checks whether the DeepSeek-OCR model files already exist locally.
+    """
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        MODEL_NAME,
-        trust_remote_code=True
+    required_files = [
+        "config.json",
+    ]
+
+    for file_name in required_files:
+        file_path = MODEL_SAVE_DIR / file_name
+
+        if not file_path.exists():
+            return False
+
+    model_weight_files = list(MODEL_SAVE_DIR.glob("*.safetensors"))
+
+    if len(model_weight_files) == 0:
+        return False
+
+    return True
+
+
+# ============================================================
+# DOWNLOAD MODEL FILES
+# ============================================================
+
+def download_model_snapshot():
+    if is_model_already_downloaded():
+        print("\nDeepSeek-OCR model already exists locally.")
+        print("Skipping download.")
+        print(f"Model location: {MODEL_SAVE_DIR.resolve()}")
+        return
+
+    print("\nDeepSeek-OCR model not found locally.")
+    print("Downloading DeepSeek-OCR model files...")
+
+    snapshot_download(
+        repo_id=MODEL_NAME,
+        local_dir=MODEL_SAVE_DIR,
+        local_dir_use_symlinks=False,
+        resume_download=True
     )
 
-    tokenizer.save_pretrained(MODEL_SAVE_DIR)
-
-    print("Tokenizer saved successfully.")
+    print("Model files downloaded successfully.")
 
 
-def download_model():
-    print("\nDownloading model...")
-
-    model = AutoModel.from_pretrained(
-        MODEL_NAME,
-        trust_remote_code=True,
-        use_safetensors=True
-    )
-
-    model.save_pretrained(MODEL_SAVE_DIR)
-
-    print("Model saved successfully.")
-
+# ============================================================
+# MAIN
+# ============================================================
 
 def main():
     print("=" * 70)
@@ -79,13 +101,11 @@ def main():
     print("=" * 70)
 
     create_project_folders()
-
-    download_tokenizer()
-    download_model()
+    download_model_snapshot()
 
     print("\n" + "=" * 70)
-    print("Download completed successfully.")
-    print(f"Model saved at: {MODEL_SAVE_DIR.resolve()}")
+    print("Setup completed.")
+    print(f"Model folder: {MODEL_SAVE_DIR.resolve()}")
     print("=" * 70)
 
 
